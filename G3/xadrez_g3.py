@@ -1,4 +1,3 @@
-
 import pygame
 import sys
 from pathlib import Path
@@ -6,23 +5,16 @@ from collections import deque
 
 pygame.init()
 
-# DIMENSÕES DO TABULEIRO
 DIMENSAO = 8
 TAMANHO_QUADRADO = 80
 LARGURA = ALTURA = DIMENSAO * TAMANHO_QUADRADO
 
-# Definição das cores (RGB)
-COR_BRANCA = (240, 217, 181)  # Bege claro
-COR_PRETA = (181, 136, 99)    # Marrom amadeirado
+COR_BRANCA = (240, 217, 181)
+COR_PRETA = (181, 136, 99)
 
 screen = pygame.display.set_mode((LARGURA, ALTURA))
-pygame.display.set_caption("Xadrez ULTIMATE")
+pygame.display.set_caption("Xadrez ULTIMATE - Animação e Efeito 3D")
 clock = pygame.time.Clock()
-
-# Matriz 8x8 com as 32 peças nas posições iniciais
-# b = branco | p = preto
-# R = Rei | D = Dama | B = Bispo
-# C = Cavalo | T = Torre | P = Peão
 
 tabuleiro_estado = [
     ["pT", "pC", "pB", "pD", "pR", "pB", "pC", "pT"],
@@ -35,29 +27,34 @@ tabuleiro_estado = [
     ["bT", "bC", "bB", "bD", "bR", "bB", "bC", "bT"]
 ]
 
-# Dicionário para armazenar os sprites
 imagens = {}
+imagens_selecionadas = {}
 
-# Caminho da imagem PNG
 PASTA_IMAGENS = Path(
-    r"C:\Users\Daniel\OneDrive\Documentos\estudos\@Graduação Ciência da Computação - PUC\1° Período\INF1034 - PRÁTICAS DE PROGRAMAÇÃO\G3\imagem_xadrez"
+    r"D:\PUC RIO\Práticas de PROG INF1034"
 )
-
 CAMINHO_SPRITE = PASTA_IMAGENS / "Chess_Pieces.png"
 
-def remover_fundo(sprite):
-    """Remove o fundo branco conectado às bordas."""
+peca_selecionada = None
+origem_selecionada = None
 
+animando = False
+peca_movendo = None
+pos_atual_anim_x = 0.0
+pos_atual_anim_y = 0.0
+destino_anim_x = 0.0
+destino_anim_y = 0.0
+
+
+def remover_fundo(sprite):
     largura, altura = sprite.get_size()
 
-    # Máscara para identificar as regiões brancas
     mascara = pygame.mask.from_threshold(
         sprite,
         (255, 255, 255, 255),
         (15, 15, 15, 255)
     )
 
-    # Marca os pixels brancos conectados às bordas
     visitados = set()
     fila = deque()
 
@@ -79,12 +76,10 @@ def remover_fundo(sprite):
             continue
 
         visitados.add((x, y))
-
         sprite.set_at((x, y), (255, 255, 255, 0))
 
         for dx, dy in [(1, 0), (-1, 0),
                        (0, 1), (0, -1)]:
-
             nx = x + dx
             ny = y + dy
 
@@ -96,17 +91,13 @@ def remover_fundo(sprite):
 
 
 def carregar_imagens():
-    """Recorta individualmente as 12 peças da sprite sheet."""
-
     sprite_sheet = pygame.image.load(
         str(CAMINHO_SPRITE)
     ).convert_alpha()
 
     largura_original, altura_original = sprite_sheet.get_size()
 
-    # Coordenadas para a imagem original de 2048x2048
     coordenadas = {
-        # Peças brancas
         "bP": (210, 80, 290, 520),
         "bT": (620, 80, 310, 520),
         "bB": (1050, 80, 310, 520),
@@ -114,7 +105,6 @@ def carregar_imagens():
         "bD": (210, 1210, 290, 680),
         "bR": (620, 1210, 310, 680),
 
-        # Peças pretas
         "pP": (210, 660, 290, 520),
         "pT": (620, 660, 310, 520),
         "pB": (1050, 660, 310, 520),
@@ -123,45 +113,35 @@ def carregar_imagens():
         "pR": (1460, 1210, 320, 680)
     }
 
-    # Adapta as coordenadas caso a imagem tenha outro tamanho
     escala_x = largura_original / 2048
     escala_y = altura_original / 2048
 
     for codigo, (x, y, largura, altura) in coordenadas.items():
-
         x = round(x * escala_x)
         y = round(y * escala_y)
         largura = round(largura * escala_x)
         altura = round(altura * escala_y)
 
-        # Recorta a peça
         sprite = sprite_sheet.subsurface(
             pygame.Rect(x, y, largura, altura)
         ).copy()
 
-        # Redimensiona antes de remover o fundo
         proporcao = min(65 / largura, 65 / altura)
-
         nova_largura = max(1, round(largura * proporcao))
         nova_altura = max(1, round(altura * proporcao))
+        sprite_normal = pygame.transform.smoothscale(sprite, (nova_largura, nova_altura))
+        imagens[codigo] = remover_fundo(sprite_normal)
 
-        sprite = pygame.transform.smoothscale(
-            sprite, (nova_largura, nova_altura)
-        )
-
-        # Remove o fundo branco
-        sprite = remover_fundo(sprite)
-
-        # Armazena a imagem no dicionário
-        imagens[codigo] = sprite
+        proporcao_zoom = min(78 / largura, 78 / altura)
+        largura_zoom = max(1, round(largura * proporcao_zoom))
+        altura_zoom = max(1, round(altura * proporcao_zoom))
+        sprite_zoom = pygame.transform.smoothscale(sprite, (largura_zoom, altura_zoom))
+        imagens_selecionadas[codigo] = remover_fundo(sprite_zoom)
 
 
 def desenhar_tabuleiro(screen):
-    """Desenha a grade 8x8 alternando as cores."""
-
     for linha in range(DIMENSAO):
         for coluna in range(DIMENSAO):
-
             if (linha + coluna) % 2 == 0:
                 cor = COR_BRANCA
             else:
@@ -180,45 +160,41 @@ def desenhar_tabuleiro(screen):
 
 
 def desenhar_pecas(screen):
-    """Desenha as peças centralizadas nas casas."""
-
     for linha in range(DIMENSAO):
         for coluna in range(DIMENSAO):
-
             peca = tabuleiro_estado[linha][coluna]
 
             if peca != "--":
+                if animando and (linha, coluna) == origem_selecionada:
+                    continue
+                if not animando and peca_selecionada == peca and origem_selecionada == (linha, coluna):
+                    imagem = imagens_selecionadas[peca]
+                    largura = imagem.get_width()
+                    altura = imagem.get_height()
+                    x = (coluna * TAMANHO_QUADRADO) + (TAMANHO_QUADRADO - largura) // 2
+                    y = (linha * TAMANHO_QUADRADO) + (TAMANHO_QUADRADO - altura) // 2
+                    screen.blit(imagem, (x, y))
+                    continue
 
                 imagem = imagens[peca]
-
                 largura = imagem.get_width()
                 altura = imagem.get_height()
 
-                # Centraliza a peça na casa
-                x = coluna * TAMANHO_QUADRADO
-                x += (TAMANHO_QUADRADO - largura) // 2
-
-                y = linha * TAMANHO_QUADRADO
-                y += (TAMANHO_QUADRADO - altura) // 2
+                x = coluna * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - largura) // 2
+                y = linha * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - altura) // 2
 
                 screen.blit(imagem, (x, y))
 
 
-# Carrega as imagens antes do loop principal
 carregar_imagens()
 
-# LOOP PRINCIPAL DO JOGO
 while True:
-
     for event in pygame.event.get():
-
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
 
-        # Interação com o mouse
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-
+        elif event.type == pygame.MOUSEBUTTONDOWN and not animando:
             pos_mouse = pygame.mouse.get_pos()
 
             coluna = pos_mouse[0] // TAMANHO_QUADRADO
@@ -226,17 +202,58 @@ while True:
 
             peca = tabuleiro_estado[linha][coluna]
 
-            print(
-                f"Clique na casa: Linha {linha+1}, "
-                f"Coluna {coluna+1}, Peça: {peca}"
-            )
+            print(f"Clique na casa: Linha {linha+1}, Coluna {coluna+1}, Peça: {peca}")
 
-    # Desenha o tabuleiro
+            if peca_selecionada is None:
+                if peca != "--":
+                    peca_selecionada = peca
+                    origem_selecionada = (linha, coluna)
+                    print(f"Peça selecionada: {peca_selecionada} em ({linha+1}, {coluna+1})")
+            
+            else:
+                origem_linha, origem_coluna = origem_selecionada
+
+                if peca == "--":
+                    tabuleiro_estado[origem_linha][origem_coluna] = "--"
+                    
+                    animando = True
+                    peca_movendo = peca_selecionada
+                    
+                    img_temp = imagens[peca_movendo]
+                    pos_atual_anim_x = origem_coluna * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - img_temp.get_width()) // 2
+                    pos_atual_anim_y = origem_linha * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - img_temp.get_height()) // 2
+                    
+                    destino_anim_x = coluna * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - img_temp.get_width()) // 2
+                    destino_anim_y = linha * TAMANHO_QUADRADO + (TAMANHO_QUADRADO - img_temp.get_height()) // 2
+                    
+                    destino_final = (linha, coluna)
+                
+                peca_selecionada = None
+                origem_selecionada = None
+
+    clock.tick(60)
+    dt = clock.get_time()
+
+    if animando:
+        velocidade_deslize = 0.015 
+        
+        pos_atual_anim_x += (destino_anim_x - pos_atual_anim_x) * velocidade_deslize * dt
+        pos_atual_anim_y += (destino_anim_y - pos_atual_anim_y) * velocidade_deslize * dt
+
+        if abs(destino_anim_x - pos_atual_anim_x) < 0.5 and abs(destino_anim_y - pos_atual_anim_y) < 0.5:
+            pos_atual_anim_x = destino_anim_x
+            pos_atual_anim_y = destino_anim_y
+            animando = False
+            tabuleiro_estado[destino_final[0]][destino_final[1]] = peca_movendo
+
+    screen.fill((56, 203, 171))
+
     desenhar_tabuleiro(screen)
 
-    # Desenha as 32 peças
     desenhar_pecas(screen)
 
-    # Atualiza a tela a 60 FPS
-    clock.tick(60)
+    if animando:
+        img_mov = imagens[peca_movendo]
+        screen.blit(img_mov, (pos_atual_anim_x, pos_atual_anim_y))
+
     pygame.display.update()
