@@ -49,11 +49,7 @@ ALTURA = DIMENSAO * TAMANHO_QUADRADO
 COR_BRANCA = (240, 217, 181)
 COR_PRETA = (181, 136, 99)
 
-# Cores utilizadas quando uma peça é selecionada.
-COR_VERMELHA_CLARA = (225, 115, 115)
-COR_VERMELHA_ESCURA = (185, 75, 75)
-
-# As casas disponíveis para movimentação ficam verdes.
+# As casas de destino legal recebem círculos verdes.
 COR_VERDE = (105, 205, 110)
 
 # Cor utilizada para destacar a peça selecionada.
@@ -213,6 +209,19 @@ def dentro_tabuleiro(linha, coluna):
         0 <= linha < DIMENSAO
         and 0 <= coluna < DIMENSAO
     )
+
+
+def coordenada_xadrez(linha, coluna):
+    """Converte índices da matriz (0 a 7) em casas como a1, e4 e h8."""
+    letra = "abcdefgh"[coluna]
+    fileira = DIMENSAO - linha
+    return f"{letra}{fileira}"
+
+
+def exibir_movimentos_legais(movimentos):
+    """Mostra os destinos legais com a notação tradicional do xadrez."""
+    casas = [coordenada_xadrez(l, c) for l, c in movimentos]
+    print("Movimentos legais:", casas)
 
 
 def cor_adversaria(cor):
@@ -462,28 +471,24 @@ def carregar_imagens():
 
 def desenhar_tabuleiro(screen):
     """
-    Desenha as 64 casas do tabuleiro.
+    Desenha as 64 casas com as cores originais (bege e marrom).
 
     Quando uma peça está selecionada:
-    - Casas legais ficam verdes.
-    - Demais casas ficam vermelhas.
+    - Desenha círculos verdes nas casas de destino legal.
+    - Mantém a cor original de cada casa.
+    - Destaca a casa selecionada com um contorno amarelo.
     """
 
     for linha in range(DIMENSAO):
-
         for coluna in range(DIMENSAO):
 
+            # Alternamos as cores originais das casas.
             if (linha + coluna) % 2 == 0:
                 cor = COR_BRANCA
             else:
                 cor = COR_PRETA
 
-            # Alteramos as cores durante a seleção.
-            if origem_selecionada is not None:
-
-                if (linha, coluna) in movimentos_disponiveis:
-                    cor = COR_VERDE
-
+            # Desenhamos a casa sem alterar sua cor de fundo.
             pygame.draw.rect(
                 screen,
                 cor,
@@ -495,11 +500,26 @@ def desenhar_tabuleiro(screen):
                 )
             )
 
-    # Destacamos a casa da peça selecionada.
+            # Desenhamos um círculo verde somente nas casas legais.
+            if (
+                origem_selecionada is not None
+                and (linha, coluna) in movimentos_disponiveis
+            ):
+                # Centro exato da casa de 80 x 80 pixels.
+                centro_x = coluna * TAMANHO_QUADRADO + TAMANHO_QUADRADO // 2
+                centro_y = linha * TAMANHO_QUADRADO + TAMANHO_QUADRADO // 2
+
+                # Raio de 15 pixels = diâmetro de 30 pixels.
+                pygame.draw.circle(
+                    screen,
+                    COR_VERDE,
+                    (centro_x, centro_y),
+                    15
+                )
+
+    # Mantemos o contorno amarelo da peça selecionada.
     if origem_selecionada is not None:
-
         linha, coluna = origem_selecionada
-
         pygame.draw.rect(
             screen,
             COR_SELECAO,
@@ -511,6 +531,30 @@ def desenhar_tabuleiro(screen):
             ),
             4
         )
+
+
+def desenhar_coordenadas(screen):
+    """Exibe a-h nas colunas e 1-8 nas fileiras, do lado das brancas.
+
+    As coordenadas ficam nos cantos das casas, sem modificar
+    o tamanho de 640 x 640 pixels nem os círculos verdes.
+    """
+    fonte_casas = pygame.font.SysFont("arial", 15, bold=True)
+
+    # Fileiras: 8 na parte superior e 1 na parte inferior.
+    for linha in range(DIMENSAO):
+        numero = str(DIMENSAO - linha)
+        cor_texto = COR_PRETA if linha % 2 == 0 else COR_BRANCA
+        texto = fonte_casas.render(numero, True, cor_texto)
+        screen.blit(texto, (4, linha * TAMANHO_QUADRADO + 3))
+
+    # Colunas: a, b, c, d, e, f, g, h, da esquerda para a direita.
+    for coluna, letra in enumerate("abcdefgh"):
+        cor_texto = COR_BRANCA if coluna % 2 == 0 else COR_PRETA
+        texto = fonte_casas.render(letra, True, cor_texto)
+        x = (coluna + 1) * TAMANHO_QUADRADO - texto.get_width() - 5
+        y = ALTURA - texto.get_height() - 3
+        screen.blit(texto, (x, y))
 
 
 # ============================================================
@@ -1652,10 +1696,7 @@ def selecionar_casa(linha, coluna):
 
     peca = tabuleiro_estado[linha][coluna]
 
-    print(
-        f"Clique: linha {linha + 1}, "
-        f"coluna {coluna + 1}, peça {peca}"
-    )
+    print(f"Clique: casa {coordenada_xadrez(linha, coluna)}, peça {peca}")
 
     # --------------------------------------------------------
     # Nenhuma peça está selecionada
@@ -1679,10 +1720,7 @@ def selecionar_casa(linha, coluna):
                 coluna
             )
 
-            print(
-                "Movimentos legais:",
-                movimentos_disponiveis
-            )
+            exibir_movimentos_legais(movimentos_disponiveis)
 
         return
 
@@ -1717,6 +1755,7 @@ def selecionar_casa(linha, coluna):
             coluna
         )
 
+        exibir_movimentos_legais(movimentos_disponiveis)
         return
 
     # --------------------------------------------------------
@@ -2085,6 +2124,12 @@ while True:
         ),
         2
     )
+
+    # --------------------------------------------------------
+    # Letras e números da notação oficial do xadrez
+    # --------------------------------------------------------
+
+    desenhar_coordenadas(screen)
 
     # --------------------------------------------------------
     # Interface de promoção
